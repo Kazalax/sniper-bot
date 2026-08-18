@@ -3,7 +3,7 @@ import Logger from "../utils/logger.js";
 
 // Zkracena odpoved katalogu neobsahuje popis, znacku, kategorii ani hodnoceni
 // prodejce. Stejna data jsou ve serverovem payloadu stranky inzeratu, odkud se
-// ctou stejnym zpusobem jako strom kategorii ve fetchCatalogInitializers.js.
+// ctou z nej, protoze API pro detail inzeratu Vinted zrusilo.
 const ITEM_PAGE_TIMEOUT_MS = 30_000;
 
 /**
