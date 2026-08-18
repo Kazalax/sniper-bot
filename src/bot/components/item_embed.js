@@ -10,44 +10,49 @@ function getNumberOfStars(rating) {
     return stars;
 }
 
-function getFlagEmoji(countryCode) {
-    if (countryCode === 'uk') {
-        return '🇬🇧';
-    }
-
-    return countryCode.toUpperCase().replace(/./g, char => 
-        String.fromCodePoint(127397 + char.charCodeAt())
-    );
-  }
-
 function replaceDomainInUrl(url, domain) {
     return url.replace(/vinted\.(.*?)\//, `vinted.${domain}/`);
 }
 
 export async function createVintedItemEmbed(item, domain = "fr") {
+    // Popis se dotahuje ze stranky inzeratu a nemusi dorazit, embed pak zustane bez nej.
+    const hasDescription = item.description && item.description !== 'N/A';
+
     const embed = await createBaseEmbed(
         null,
         item.title,
-        `📝 ${item.description}`,
+        hasDescription ? `📝 ${item.description}` : ' ',
         item.getDominantColor()
     )
 
     embed.setURL(replaceDomainInUrl(item.url, domain));
 
-    const rating = item.user.feedback_reputation;
-    const ratingStars = getNumberOfStars(rating);
-    const ratingTextRounded = Math.round(rating * 50) / 10;
-    const ratingAllText = `${item.user.feedback_count}`;
-
-    embed.setFields([
+    const fields = [
         { name: '💰 Price', value: `${item.priceNumeric} ${item.currency}`, inline : true},
         { name: '📏 Size', value: `${item.size} ` , inline : true },
         { name: '🏷️ Brand', value: `${item.brand} ` , inline : true },
-        { name: '🌍 Country', value: `${getFlagEmoji(item.user.countryCode)} `, inline : true},
-        { name: '⭐️ User Rating', value: `${ratingStars} (${ratingTextRounded}) of ${ratingAllText}`, inline : true},
         { name: '📦 Condition', value: `${item.status} `, inline : true },
-        { name: '📅 Updated', value: `${item.unixUpdatedAtString} `, inline : true},
-    ]);
+    ];
+
+    // Cas upravy inzeratu chodi jen v detailu; bez nej by pole ukazovalo rok 1970.
+    if (item.unixUpdatedAt > 0) {
+        fields.push({ name: '📅 Updated', value: `${item.unixUpdatedAtString} `, inline : true});
+    }
+
+    // Hodnoceni prodejce pochazi z detailu inzeratu, bez nej se pole vynecha.
+    const rating = item.user ? item.user.feedback_reputation : 0;
+    if (rating > 0) {
+        const ratingStars = getNumberOfStars(rating);
+        const ratingTextRounded = Math.round(rating * 50) / 10;
+        fields.push({ name: '⭐️ User Rating', value: `${ratingStars} (${ratingTextRounded}) of ${item.user.feedback_count}`, inline : true});
+    }
+
+    // Discord odmitne pole s prazdnou hodnotou a katalog nektera pole (velikost,
+    // znacka) u casti inzeratu vubec nevraci.
+    embed.setFields(fields.filter(field => {
+        const value = field.value.trim();
+        return value && value !== 'N/A';
+    }));
 
     const photosEmbeds = []
     const maxPhotos = 3;
