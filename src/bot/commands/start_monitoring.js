@@ -4,6 +4,7 @@ import crud from '../../crud.js';
 import t from '../../t.js';
 import Logger from '../../utils/logger.js';
 import { Preference, ShippableMap } from '../../database.js';
+import { buildApiFiltersFromUrl, hasAnyFilter } from '../../services/url_service.js';
 
 export const data = new SlashCommandBuilder()
     .setName('start_monitoring')
@@ -40,9 +41,11 @@ function validateUrl(url) {
             return "must-have-query-params"
         }
 
-        // cehck if there is at least a brand_ids[] or video_game_platform_ids[] query parameter
-        if (!searchParams.has('brand_ids[]') && !searchParams.has('video_game_platform_ids[]')) {
-            return "must-have-brand-query-param";
+        // Drive se vyzadovala znacka, protoze stary engine paroval inzeraty vyhradne
+        // pres brand_id. Dnes se filtruje na serveru podle cele adresy, takze staci
+        // jakykoli podporovany filtr - jen ne uplne prazdne hledani pres cely Vinted.
+        if (!hasAnyFilter(buildApiFiltersFromUrl(url))) {
+            return "must-have-supported-filter";
         }
 
         return true;
