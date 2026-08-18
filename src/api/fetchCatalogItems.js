@@ -1,7 +1,7 @@
 import { executeWithDetailedHandling } from "../helpers/execute_helper.js";
 import RequestBuilder from "../utils/request_builder.js";
 import ConfigurationManager from "../utils/config_manager.js";
-import { NotFoundError } from "../helpers/execute_helper.js";
+import { NotFoundError, RateLimitError } from "../helpers/execute_helper.js";
 
 const extension = ConfigurationManager.getAlgorithmSetting.vinted_api_domain_extension
 
@@ -49,10 +49,20 @@ export async function fetchCatalogItems({ cookie, filters = {}, per_page = 96, o
         const query = buildQuery(filters, per_page, order);
         const url = `https://www.vinted.${extension}/api/v2/catalog/items?${query.toString()}`;
 
-        const response = await RequestBuilder.get(url)
+        // Axios hazi vyjimku uz pri 4xx, takze bez tohoto prekladu by se rate limit
+        // schoval pod obecnou petistovku a planovac by na nej nemohl zareagovat.
+        let response;
+        try {
+            response = await RequestBuilder.get(url)
                         .setNextProxy()
                         .setCookie(cookie)
                         .send();
+        } catch (error) {
+            if (error.response?.status === 429) {
+                throw new RateLimitError("Rate limit exceeded.");
+            }
+            throw error;
+        }
 
         if (!response.success) {
             throw new NotFoundError("Error fetching catalog items.");
