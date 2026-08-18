@@ -1,0 +1,26 @@
+# Uprava pro Raspberry Pi 4 (Cortex-A72 = ARMv8.0-A, 32bit userland + 64bit kernel).
+# 1) mongo:latest z docker-compose.yml nenabehne - MongoDB >=5.0 i >=4.4.19 vyzaduje ARMv8.2-A.
+#    Posledni verze, ktera na A72 bezi, je 4.4.18 (mongoose 8 ji dle docs podporuje).
+# 2) Docker na 32bit userlandu resolvuje neexistujici platformu linux/arm/v8 - proto explicitni platform.
+# 3) Vychozi seccomp profil je pro arm32 a zabiji arm64 binarky signalem SIGSYS (exit 159).
+# 4) Node bezi jako 32bit arm - heap limit 4096 MB z package.json je nad adresnim limitem 32bit V8.
+# 5) Rotace logu: system bezi na SD karte se 7 GB volnymi, bot loguje kazdy zpracovany inzerat.
+services:
+  app:
+    command: sh -c "npm install && node --max-old-space-size=512 main.js"
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  mongodb:
+    image: mongo:4.4.18
+    platform: linux/arm64
+    security_opt:
+      - seccomp:unconfined
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"

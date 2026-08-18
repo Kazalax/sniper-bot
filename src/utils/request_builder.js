@@ -1,11 +1,23 @@
 import axios from 'axios';
 import ProxyManager from './proxy_manager.js';
-import { getRandom } from 'random-useragent';
 import Logger from './logger.js';
 import ConfigurationManager from './config_manager.js';
 
 const algorithm_settings = ConfigurationManager.getAlgorithmSetting
 const vinted_api_domain_extension = algorithm_settings.vinted_api_domain_extension;
+
+// Puvodne se user-agent bral z balicku random-useragent s filtrem browserVersion >= 50.
+// Jeho databaze je z roku 2018 - nejnovejsi Chrome v ni je 52 a Vinted na takovy
+// user-agent odpovida HTTP 406, takze bot nikdy nedostal cookie a zacyklil se.
+// Rotujeme proto pevny seznam soucasnych prohlizecu (vsechny overene proti vinted.cz: HTTP 200).
+const USER_AGENTS = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:141.0) Gecko/20100101 Firefox/141.0',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 Edg/139.0.0.0',
+];
 
 const BASE_HEADERS = {
     'Accept': 'application/json, text/plain, */*',
@@ -92,9 +104,7 @@ class RequestBuilder {
     async send() {
 
         // Get a random user-agent
-        const userAgent = getRandom( (ua) => {
-            return parseFloat(ua.browserVersion) >= 50;
-        });
+        const userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
 
         Logger.debug(`Sending request to ${this.url} with user-agent: ${userAgent}`);
 
@@ -126,7 +136,9 @@ class RequestBuilder {
                 throw new Error('Not found');
             }
 
-            Logger.debug(`Error sending request to ${this.url}, status: ${error.response.status}`);
+            // optional chaining: pri vypadku site nebo timeoutu axios chybu bez response,
+            // puvodni zapis pak v hlavni monitorovaci smycce shodil cely bot na TypeError.
+            Logger.debug(`Error sending request to ${this.url}, status: ${error.response?.status}`);
             this.proxy && ProxyManager.removeTemporarlyInvalidProxy(this.proxy);
             throw error;
         }

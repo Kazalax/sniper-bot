@@ -21,7 +21,13 @@ export async function fetchCookie() {
         if (response && response.headers['set-cookie']) {
 
             const cookies = response.headers['set-cookie'];
-            const vintedCookie = cookies.find(cookie => cookie.startsWith('access_token_web'));
+            // Vinted posila access_token_web dvakrat: nejdriv prazdnou hodnotu (maze predchozi
+            // session) a az potom platny JWT. Puvodni .find() vracel tu prazdnou, takze
+            // /api/v2/catalog/items odpovidalo 401 invalid_authentication_token.
+            const prefix = 'access_token_web=';
+            const vintedCookie = cookies
+                .filter(cookie => cookie.startsWith(prefix) && cookie.split(';')[0].length > prefix.length)
+                .pop();
             if (vintedCookie) {
                 const cookie = vintedCookie.split(';')[0];
                 Logger.debug(`Fetched cookie: ${cookie}`);
