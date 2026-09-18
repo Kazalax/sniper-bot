@@ -55,7 +55,17 @@ async function executeWithDetailedHandling(asyncFn, ...params) {
  * Determines the HTTP status code based on the error type using a mapping object.
  */
 function determineStatusCode(error) {
-    return errorStatusMap[error.name] || 500; // Default to 500 if error name is not mapped
+    if (errorStatusMap[error.name]) {
+        return errorStatusMap[error.name];
+    }
+
+    // Bez tohoto by se z blokace (403) i ze zrusene adresy (404) stala petistovka
+    // a volajici by nepoznal, jestli ma smysl zkouset znovu.
+    if (error.response?.status) {
+        return error.response.status;
+    }
+
+    return 500;
 }
 
 /**

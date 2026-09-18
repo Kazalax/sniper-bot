@@ -2,6 +2,7 @@ import axios from 'axios';
 import ProxyManager from './proxy_manager.js';
 import Logger from './logger.js';
 import ConfigurationManager from './config_manager.js';
+import { NotFoundError } from '../helpers/execute_helper.js';
 
 const algorithm_settings = ConfigurationManager.getAlgorithmSetting
 const vinted_api_domain_extension = algorithm_settings.vinted_api_domain_extension;
@@ -131,9 +132,10 @@ class RequestBuilder {
             response.success = response.status >= 200 && response.status < 300;
             return response
         } catch (error) {
-            // if response is a 404 it's not an error
+            // Puvodni zapis prevadel 404 na obycejnou chybu bez stavoveho kodu, takze
+            // zrusena adresa dopadla stejne jako vypadek site a bot se ptal porad dokola.
             if (error.response && error.response.status === 404) {
-                throw new Error('Not found');
+                throw new NotFoundError('Not found');
             }
 
             // optional chaining: pri vypadku site nebo timeoutu axios chybu bez response,
