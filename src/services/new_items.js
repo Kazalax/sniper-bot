@@ -10,7 +10,7 @@ export const GRACE_MS = 10 * 60 * 1000;
 const RETENTION_MS = 6 * 60 * 60 * 1000;
 
 export function createSeenState() {
-    return { seen: new Map(), newestSeenAt: null };
+    return { seen: new Map(), newestSeenAt: null, synchronized: false };
 }
 
 function remember(state, items, now) {
@@ -39,8 +39,11 @@ export function selectNewItems(items, state, now = new Date()) {
     // inzeratu, ktere uzivatel uz videl.
     if (state.newestSeenAt === null) {
         remember(state, items, now);
+        state.synchronized = true;
         return [];
     }
+
+    state.synchronized = false;
 
     const oldestAccepted = state.newestSeenAt.getTime() - GRACE_MS;
     const found = items

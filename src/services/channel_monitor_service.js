@@ -179,6 +179,18 @@ class ChannelMonitorService {
         const items = await provider.fetchNewest(query);
         const newItems = selectNewItems(items, state.items);
 
+        // Bez tohoto zapisu nejde v logu poznat "hlida a nic nepribylo" od "nehlida".
+        if (state.items.synchronized) {
+            Logger.info(`Kanal ${channel.channelId} (${provider.name}) sesynchronizovan, zapamatovano ${items.length} inzeratu`);
+            return;
+        }
+
+        if (newItems.length) {
+            Logger.info(`Kanal ${channel.channelId} (${provider.name}): ${newItems.length} novych inzeratu`);
+        } else {
+            Logger.debug(`Kanal ${channel.channelId} (${provider.name}): nic noveho z ${items.length} inzeratu`);
+        }
+
         for (const item of newItems) {
             await this.config.onItem(item, channel, provider);
         }
