@@ -3,7 +3,7 @@ import { createBaseEmbed, sendErrorEmbed, sendWaitingEmbed, sendWarningEmbed } f
 import crud from '../../crud.js';
 import t from '../../t.js';
 import Logger from '../../utils/logger.js';
-import { Preference, ShippableMap } from '../../database.js';
+import { Preference } from '../../database.js';
 import { buildApiFiltersFromUrl, hasAnyFilter } from '../../services/url_service.js';
 
 export const data = new SlashCommandBuilder()
@@ -60,19 +60,6 @@ function urlContainsSearchTextParameter(url) {
     return searchParams.has('search_text');
 }
 
-// get .fr or other domain from the URL
-function getDomainInUrl(url) {
-    const urlObj = new URL(url);
-    let domain = urlObj.hostname.split('.').pop();
-
-    // handle .co.uk and other domains get only uk
-    if (domain === 'co') {
-        domain = urlObj.hostname.split('.').slice(-2)[0];
-    }
-
-    return domain;
-}
-
 export async function execute(interaction) {
     const l = interaction.locale;
     await sendWaitingEmbed(interaction, t(l, 'starting-monitoring'));
@@ -124,9 +111,6 @@ export async function execute(interaction) {
 
         await interaction.followUp({ embeds: [embed] });
 
-        const domain = getDomainInUrl(url);
-
-        await crud.setVintedChannelPreference(channelId, Preference.Countries, [ ...ShippableMap[domain], domain]);
         await crud.setVintedChannelUpdatedAtNow(channelId);
         await crud.setVintedChannelBannedKeywords(channelId, bannedKeywords);
 

@@ -54,7 +54,6 @@ export async function execute(interaction) {
                 { name: `${t(l, 'user-id')}`, value: `${user._id} ` },
                 { name: `${t(l, 'discord-id')}`, value: `${user.discordId} ` },
                 { name: `${t(l, 'max-channels')}`, value: `${userNumberOfChannels} / ${user.maxChannels} `, inline: true },
-                { name: `${t(l, 'country-whitelist')}`, value: `${user.preferences.get(Preference.Countries) || []} `, inline: true },
                 { name: `${t(l, 'user-mentions')}`, value: `${user.preferences.get(Preference.Mention) || false} `, inline: true }
             ]);
 
@@ -87,7 +86,6 @@ export async function execute(interaction) {
                 { name: `${t(l, 'url')}`, value: `${channel.url} ` },
                 { name: `${t(l, 'monitoring')}`, value: `${channel.isMonitoring} `, inline: true },
                 { name: `${t(l, 'type')}`, value: `${channel.type} `, inline: true },
-                { name: `${t(l, 'country-whitelist')}`, value: `${channel.preferences.get(Preference.Countries) || []} `, inline: true },
                 { name: `${t(l, 'user-mentions')}`, value: `${channel.preferences.get(Preference.Mention) || false} `, inline: true }
             ]);
         }

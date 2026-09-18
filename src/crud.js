@@ -322,26 +322,6 @@ async function getAllMonitoredVintedChannels() {
     return channels;
 }
 
-async function getAllMonitoredVintedChannelsBrandMap() {
-    const channels = await getAllMonitoredVintedChannels();
-    const brandMap = new Map();
-
-    for (const channel of channels) {
-        const brands = channel.generated_filters["brand_ids"]
-
-
-        for (const brand of brands) {
-            
-            if (!brandMap.has(brand)) {
-                brandMap.set(brand, [channel]);
-            } else {
-                brandMap.get(brand).push(channel);
-            }
-        }
-    }
-
-    return brandMap;
-}
 
 async function getAllVintedChannelsByDiscordId(discordId) {
     const user = await getUserByDiscordId(discordId);
@@ -502,7 +482,6 @@ const crud = {
     getAllVintedChannels,
     getAllPrivateVintedChannels,
     getAllMonitoredVintedChannels,
-    getAllMonitoredVintedChannelsBrandMap,
     getAllVintedChannelsByDiscordId,
     updateVintedChannel,
     deleteVintedChannel,
