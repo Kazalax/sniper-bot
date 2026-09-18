@@ -26,13 +26,33 @@ export async function registerCommands(client, discordConfig) {
     const rest = new REST({ version: '9' }).setToken(discordConfig.token);
     try {
         Logger.info('Started refreshing application (/) commands.');
+
+        // Globalni registrace se propaguje az hodinu a klient do te doby hlasi
+        // "This command is outdated". Bot obsluhuje jediny server, takze se prikazy
+        // registruji primo na nej, kde plati okamzite.
+        if (discordConfig.guild_id) {
+            await rest.put(
+                Routes.applicationGuildCommands(discordConfig.client_id, discordConfig.guild_id),
+                { body: commands }
+            );
+
+            // Stare globalni prikazy by se v nabidce zobrazovaly dvakrat.
+            await rest.put(
+                Routes.applicationCommands(discordConfig.client_id),
+                { body: [] }
+            );
+
+            Logger.info(`Prikazy zaregistrovany na serveru ${discordConfig.guild_id}: ${commands.length}`);
+            return;
+        }
+
         await rest.put(
             Routes.applicationCommands(discordConfig.client_id),
             { body: commands }
         );
         Logger.info('Successfully reloaded application (/) commands.');
     } catch (error) {
-        console.error('Error reloading commands:', error);
+        Logger.error(`Registrace prikazu selhala: ${error.message}`);
     }
 }
 
