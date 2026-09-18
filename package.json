@@ -18,7 +18,8 @@
   "scripts": {
     "start": "node --max-old-space-size=4096 main.js",
     "dev": "nodemon --max-old-space-size=4096 main.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test test/",
+    "check": "node scripts/check.mjs"
   },
   "author": "",
   "license": "ISC",

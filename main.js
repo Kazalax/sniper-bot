@@ -3,65 +3,53 @@ import { Preference } from "./src/database.js";
 import client from "./src/client.js";
 import ConfigurationManager from "./src/utils/config_manager.js";
 import { postMessageToChannel, checkVintedChannelInactivity } from "./src/services/discord_service.js";
-import { createVintedItemEmbed, createVintedItemActionRow } from "./src/bot/components/item_embed.js";
-import { fetchCookie } from "./src/api/fetchCookie.js";
 import crud from "./src/crud.js";
 import Logger from "./src/utils/logger.js";
 import ChannelMonitorService from "./src/services/channel_monitor_service.js";
+import HealthReporter from "./src/services/health_reporter.js";
+import { allProviders } from "./src/providers/index.js";
 
-const COOKIE_REFRESH_INTERVAL_MS = 60000;
-const COOKIE_RETRY_DELAY_MS = 200;
 const INACTIVITY_CHECK_INTERVAL_MS = 1000 * 60 * 30;
-
-var cookie = null;
 
 try {
     await ProxyManager.init();
 } catch (error) {
-    Logger.error(`Failed to initialize proxies: ${error.message}`);
-    Logger.info('Continuing without proxies...');
+    Logger.error(`Nepodarilo se pripravit proxy: ${error.message}`);
+    Logger.info('Pokracuji bez proxy');
 }
 
 const algorithmSettings = ConfigurationManager.getAlgorithmSetting;
 const discordConfig = ConfigurationManager.getDiscordConfig;
 const token = discordConfig.token;
 
-const refreshCookie = async () => {
-    while (true) {
-        try {
-            const fetched = await fetchCookie();
-            if (fetched.cookie) {
-                Logger.info('Fetched cookie from Vinted');
-                return fetched.cookie;
-            }
-        } catch (error) {
-            Logger.debug('Error fetching cookie');
-        }
+Logger.info('Startuji bota');
 
-        await new Promise(resolve => setTimeout(resolve, COOKIE_RETRY_DELAY_MS));
-    }
-};
-
-Logger.info('Starting Vinted Bot');
-Logger.info('Fetching cookie from Vinted');
-
-cookie = await refreshCookie();
-
-setInterval(async () => {
+// Kazdy poskytovatel si pripravi svoji relaci sam; Aukro zadnou nepotrebuje.
+for (const provider of allProviders()) {
     try {
-        cookie = await refreshCookie();
+        await provider.init();
+        Logger.info(`Poskytovatel ${provider.name} pripraven`);
     } catch (error) {
-        Logger.debug('Error refreshing cookie');
+        Logger.error(`Poskytovatele ${provider.name} se nepodarilo pripravit: ${error.message}`);
     }
-}, COOKIE_REFRESH_INTERVAL_MS);
+}
 
-const sendToChannel = async (item, vintedChannel) => {
-    // Domena z adresy kanalu urcuje, na kterou jazykovou mutaci Vinted odkazy miri.
-    const domainMatch = vintedChannel.url.match(/vinted\.(.*?)\//);
-    const domain = domainMatch ? domainMatch[1] : algorithmSettings.vinted_api_domain_extension;
+// Hlaseni poruch chodi do log kanalu. Bez vyplneneho ID jdou jen do logu.
+if (!discordConfig.log_channel_id) {
+    Logger.warn('DISCORD_LOG_CHANNEL_ID neni vyplnene, hlaseni poruch pujdou jen do logu');
+}
 
-    const { embed, photosEmbeds } = await createVintedItemEmbed(item, domain);
-    const actionRow = await createVintedItemActionRow(item, domain);
+HealthReporter.configure({
+    send: async (text) => {
+        if (!discordConfig.log_channel_id) {
+            return;
+        }
+        await postMessageToChannel(token, discordConfig.log_channel_id, text, [], []);
+    },
+});
+
+const sendToChannel = async (item, vintedChannel, provider) => {
+    const { embeds, components } = await provider.buildMessage(item, vintedChannel);
 
     const user = vintedChannel.user;
     const doMentionUser = user && vintedChannel.preferences.get(Preference.Mention);
@@ -72,28 +60,26 @@ const sendToChannel = async (item, vintedChannel) => {
             token,
             vintedChannel.channelId,
             `${mentionString} `,
-            [embed, ...photosEmbeds],
-            [actionRow]
+            embeds,
+            components
         );
-    }
-    catch (error) {
-        Logger.debug('Error posting message to channel');
+    } catch (error) {
+        Logger.debug('Zpravu se nepodarilo poslat do kanalu');
         Logger.debug(error);
     }
 };
 
-Logger.info('Starting monitoring channels');
+Logger.info('Spoustim hlidani kanalu');
 
 await ChannelMonitorService.start({
     getChannels: () => crud.getAllMonitoredVintedChannels(),
-    getCookie: () => cookie,
     intervalMs: algorithmSettings.monitor_interval_seconds * 1000,
     onItem: sendToChannel,
 });
 
 crud.eventEmitter.on('updated', async () => {
     await ChannelMonitorService.refresh();
-    Logger.debug('Updated vinted channels');
+    Logger.debug('Hlidane kanaly aktualizovany');
 });
 
 if (discordConfig.channel_inactivity_enabled) {

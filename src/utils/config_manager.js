@@ -25,6 +25,8 @@ class ConfigurationManager {
         guild_id: process.env.DISCORD_GUILD_ID,
         thread_channel_id: process.env.DISCORD_THREAD_CHANNEL_ID,
         command_channel_id: process.env.DISCORD_COMMAND_CHANNEL_ID,
+        // Kanal pro hlaseni poruch. Prazdna hodnota hlaseni do Discordu vypne.
+        log_channel_id: process.env.DISCORD_LOG_CHANNEL_ID || '',
         channel_inactivity_enabled: process.env.ENABLE_CHANNEL_INACTIVITY == 1 ? true : false,
         channel_inactivity_hours: process.env.CHANNEL_INACTIVITY_HOURS,
         channel_inactivity_delete_hours: process.env.CHANNEL_INACTIVITY_DELETE_HOURS,
@@ -55,7 +57,8 @@ class ConfigurationManager {
      * @returns {Object} Algorithm settings object.
      */
     static getAlgorithmSetting = {
-        vinted_api_domain_extension: process.env.VINTED_API_DOMAIN_EXTENSION,
+        // Bez vyplnene promenne by se bot ptal domeny "vinted.undefined".
+        vinted_api_domain_extension: process.env.VINTED_API_DOMAIN_EXTENSION || 'cz',
         filter_zero_stars_profiles: process.env.ALGORITHM_FILTER_ZERO_STARS_PROFILES == 1 ? true : false,
         concurrent_requests: process.env.ALGORITHM_CONCURRENT_REQUESTS,
         // Jak casto se kontroluje jeden kanal. Vychozi minuta je kompromis mezi

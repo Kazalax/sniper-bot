@@ -1,47 +1,43 @@
 import Logger from "../utils/logger.js";
-import { fetchCatalogItems } from "../api/fetchCatalogItems.js";
-import { fetchItemDetail } from "../api/fetchItemDetail.js";
-import { VintedItem } from "../entities/vinted_item.js";
-import { buildApiFiltersFromUrl, hasAnyFilter, filterItemsByUrl } from "./url_service.js";
-import ConfigurationManager from "../utils/config_manager.js";
+import { resolveProvider } from "../providers/index.js";
+import { createSeenState, selectNewItems } from "./new_items.js";
+import HealthReporter from "./health_reporter.js";
+import { ERROR_KIND } from "../providers/errors.js";
 
-// Kolik polozek se tahá z katalogu na jeden dotaz. Pri intervalu v radu desitek
-// sekund nova polozka v jednom kanalu tolik nepribyva, vetsi stranka by jen
-// prenasela data, ktera se stejne zahodi pri deduplikaci.
-const ITEMS_PER_REQUEST = 20;
-// Po rate limitu se interval kanalu nasobi, dokud dotaz zase neprojde.
-const RATE_LIMIT_BACKOFF_FACTOR = 2;
+// Nasobek intervalu podle tridy chyby. Blokaci rychle opakovani jen udrzuje,
+// proto se u ni zpomaluje nejvic.
+const BACKOFF_BY_KIND = {
+    [ERROR_KIND.RATE_LIMIT]: 2,
+    [ERROR_KIND.BLOCKED]: 5,
+    [ERROR_KIND.TEMPORARY]: 1,
+    [ERROR_KIND.SHAPE]: 1,
+};
 const MAX_BACKOFF_MULTIPLIER = 10;
-const HTTP_RATE_LIMIT = 429;
 
 /**
- * Watches every monitored channel separately and reports new items.
+ * Hlida kazdy kanal zvlast a hlasi nove inzeraty.
  *
- * Kazdy kanal ma vlastni casovac a vlastni pamet posledniho videneho ID, takze
- * kanaly na sobe nezavisi a chyba jednoho neshodi ostatni. Filtrovani dela Vinted
- * na serveru podle parametru z URL kanalu.
+ * Kazdy kanal ma vlastni casovac a vlastni pamet videnych inzeratu, takze
+ * porucha jednoho kanalu nezastavi ostatni. O tom, jak se ptat daneho webu,
+ * rozhoduje poskytovatel vybrany podle URL kanalu.
  */
 class ChannelMonitorService {
     static states = new Map();
     static config = null;
 
     /**
-     * Starts monitoring.
-     * @param {Object} params - Service configuration.
-     * @param {Function} params.getChannels - Async function returning monitored channels.
-     * @param {Function} params.getCookie - Function returning the current Vinted cookie.
-     * @param {number} params.intervalMs - Base interval between checks of one channel.
-     * @param {Function} params.onItem - Called as onItem(item, channel) for every new item.
+     * Spusti hlidani.
+     * @param {Object} params - Nastaveni sluzby.
+     * @param {Function} params.getChannels - Asynchronni funkce vracejici hlidane kanaly.
+     * @param {number} params.intervalMs - Zakladni interval mezi kontrolami jednoho kanalu.
+     * @param {Function} params.onItem - Vola se jako onItem(item, channel, provider) pro kazdy novy inzerat.
      * @returns {Promise<void>}
      */
-    static async start({ getChannels, getCookie, intervalMs, onItem }) {
-        this.config = { getChannels, getCookie, intervalMs, onItem };
+    static async start({ getChannels, intervalMs, onItem }) {
+        this.config = { getChannels, intervalMs, onItem };
         await this.refresh();
     }
 
-    /**
-     * Stops all timers.
-     */
     static stop() {
         for (const state of this.states.values()) {
             clearTimeout(state.timer);
@@ -50,8 +46,7 @@ class ChannelMonitorService {
     }
 
     /**
-     * Synchronizes timers with the current list of monitored channels.
-     * Vola se pri startu a pokazde, kdyz se seznam kanalu zmeni.
+     * Srovna casovace se seznamem hlidanych kanalu.
      * @returns {Promise<void>}
      */
     static async refresh() {
@@ -63,7 +58,7 @@ class ChannelMonitorService {
         try {
             channels = await this.config.getChannels();
         } catch (error) {
-            Logger.error(`Failed to load monitored channels: ${error.message}`);
+            Logger.error(`Nepodarilo se nacist hlidane kanaly: ${error.message}`);
             return;
         }
 
@@ -77,17 +72,20 @@ class ChannelMonitorService {
             if (!existing) {
                 this.states.set(key, {
                     channel,
-                    lastSeenId: 0,
+                    items: createSeenState(),
                     backoffMultiplier: 1,
+                    stopped: false,
                     timer: null,
                 });
                 this.scheduleNext(key, 0);
                 continue;
             }
 
-            // Zmena URL znamena jine hledani, takze se pamet posledniho ID zahazuje.
+            // Zmenena URL znamena jine hledani, stav se zahodi.
             if (existing.channel.url !== channel.url) {
-                existing.lastSeenId = 0;
+                existing.items = createSeenState();
+                existing.stopped = false;
+                existing.backoffMultiplier = 1;
             }
             existing.channel = channel;
         }
@@ -99,17 +97,12 @@ class ChannelMonitorService {
             }
         }
 
-        Logger.info(`Monitoring ${this.states.size} Vinted channels`);
+        Logger.info(`Hlidam ${this.states.size} kanalu`);
     }
 
-    /**
-     * Schedules the next check of one channel.
-     * @param {string} key - Channel identifier.
-     * @param {number} [delayMs] - Delay before the check; defaults to the channel interval.
-     */
     static scheduleNext(key, delayMs) {
         const state = this.states.get(key);
-        if (!state) {
+        if (!state || state.stopped) {
             return;
         }
 
@@ -118,125 +111,76 @@ class ChannelMonitorService {
     }
 
     /**
-     * Checks one channel for new items.
-     * @param {string} key - Channel identifier.
-     * @returns {Promise<void>}
+     * Spocita, kolik kanalu hlida dany web. Pouziva se v hlaseni poruch.
+     * @param {string} providerName - Nazev poskytovatele.
+     * @returns {number}
      */
+    static countChannelsOfProvider(providerName) {
+        let count = 0;
+        for (const state of this.states.values()) {
+            const provider = resolveProvider(state.channel.url);
+            if (provider && provider.name === providerName) {
+                count += 1;
+            }
+        }
+        return count;
+    }
+
     static async checkChannel(key) {
         const state = this.states.get(key);
         if (!state) {
             return;
         }
 
-        try {
-            await this.collectNewItems(state);
-            state.backoffMultiplier = 1;
-        } catch (error) {
-            if (error.code === HTTP_RATE_LIMIT) {
-                state.backoffMultiplier = Math.min(state.backoffMultiplier * RATE_LIMIT_BACKOFF_FACTOR, MAX_BACKOFF_MULTIPLIER);
-                Logger.warn(`Rate limited on channel ${key}, next check in ${this.config.intervalMs * state.backoffMultiplier / 1000}s`);
-            } else {
-                Logger.error(`Error checking channel ${key}: ${error.message}`);
-            }
+        const provider = resolveProvider(state.channel.url);
+        if (!provider) {
+            Logger.warn(`Kanal ${key} ma URL, kterou nezna zadny poskytovatel, hlidani zastaveno`);
+            state.stopped = true;
+            return;
         }
 
-        // Kanal se planuje i po chybe, jinak by jedno selhani hlidani nadobro zastavilo.
+        try {
+            await this.collectNewItems(state, provider);
+            state.backoffMultiplier = 1;
+            await HealthReporter.recordSuccess(provider.name);
+        } catch (error) {
+            const kind = error.kind || ERROR_KIND.TEMPORARY;
+            await HealthReporter.recordFailure(provider.name, error, this.countChannelsOfProvider(provider.name));
+
+            // Zrusenou adresu nema smysl zkouset znovu.
+            if (kind === ERROR_KIND.GONE) {
+                state.stopped = true;
+                Logger.error(`Kanal ${key}: ${error.message}, hlidani zastaveno`);
+                return;
+            }
+
+            const factor = BACKOFF_BY_KIND[kind] ?? 1;
+            state.backoffMultiplier = Math.min(state.backoffMultiplier * factor, MAX_BACKOFF_MULTIPLIER);
+            Logger.error(`Kanal ${key}: ${error.message} (${kind})`);
+        }
+
+        // Kanal se planuje znovu i po chybe, jinak by ho jedno selhani zastavilo natrvalo.
         this.scheduleNext(key);
     }
 
-    /**
-     * Fetches the channel search results and reports items newer than the last seen one.
-     * @param {Object} state - Channel state.
-     * @returns {Promise<void>}
-     */
-    static async collectNewItems(state) {
+    static async collectNewItems(state, provider) {
         const { channel } = state;
-        const filters = buildApiFiltersFromUrl(channel.url);
+        const query = provider.buildQuery(channel.url);
 
-        if (!hasAnyFilter(filters)) {
-            Logger.warn(`Channel ${channel.channelId} has no usable filters in its URL, skipping`);
+        if (!provider.hasAnyFilter(query)) {
+            Logger.warn(`Kanal ${channel.channelId} nema v URL pouzitelny filtr, preskakuji`);
             return;
         }
 
-        const response = await fetchCatalogItems({
-            cookie: this.config.getCookie(),
-            filters,
-            per_page: ITEMS_PER_REQUEST,
-        });
-
-        if (!response.success) {
-            const error = new Error(response.error || "Error fetching catalog items.");
-            error.code = response.code;
-            throw error;
+        if (query.dropped?.length) {
+            Logger.warn(`Kanal ${channel.channelId}: zahozene parametry URL: ${query.dropped.join(', ')}`);
         }
 
-        const rawItems = response.items || [];
-        if (!rawItems.length) {
-            return;
-        }
+        const items = await provider.fetchNewest(query);
+        const newItems = selectNewItems(items, state.items);
 
-        const highestId = Math.max(...rawItems.map(item => Number(item.id)));
-
-        // Prvni beh jen zapamatuje aktualni stav, jinak by po kazdem restartu
-        // prisla salva inzeratu, ktere uzivatel uz videl.
-        if (state.lastSeenId === 0) {
-            state.lastSeenId = highestId;
-            Logger.info(`Channel ${channel.channelId} synchronized at item ${highestId}`);
-            return;
-        }
-
-        const newItems = rawItems
-            .filter(item => Number(item.id) > state.lastSeenId)
-            .sort((a, b) => Number(a.id) - Number(b.id));
-
-        state.lastSeenId = highestId;
-
-        if (!newItems.length) {
-            return;
-        }
-
-        // Kdyz je nova cela stranka, znamena to, ze mezi dvema kontrolami pribylo vic
-        // polozek, nez se jich vejde do jednoho dotazu, a starsi z nich uz nikdo neuvidi.
-        if (newItems.length === rawItems.length) {
-            Logger.warn(`Channel ${channel.channelId} returned a full page of new items, some may have been missed. Shorten the interval or narrow the search.`);
-        }
-
-        await this.reportItems(newItems, channel);
-    }
-
-    /**
-     * Adds details to new items, applies local filters and hands them over.
-     * @param {Array<Object>} rawItems - Raw items from the catalog response.
-     * @param {Object} channel - Channel the items belong to.
-     * @returns {Promise<void>}
-     */
-    static async reportItems(rawItems, channel) {
-        const concurrency = Math.max(1, Number(ConfigurationManager.getAlgorithmSetting.concurrent_requests) || 1);
-        const filterZeroStars = ConfigurationManager.getAlgorithmSetting.filter_zero_stars_profiles;
-        const cookie = this.config.getCookie();
-
-        for (let i = 0; i < rawItems.length; i += concurrency) {
-            const batch = rawItems.slice(i, i + concurrency);
-
-            const items = await Promise.all(batch.map(async raw => {
-                const item = new VintedItem(raw);
-                const detail = await fetchItemDetail({ cookie, url: item.url });
-                return item.mergeDetail(detail);
-            }));
-
-            for (const item of items) {
-                if (filterZeroStars && item.getNumericStars() === 0) {
-                    continue;
-                }
-
-                // Zbyva uz jen to, co server neumi: zakazana slova a fuzzy shoda textu.
-                const [matched] = filterItemsByUrl([item], channel.url, channel.bannedKeywords || []);
-                if (!matched) {
-                    continue;
-                }
-
-                await this.config.onItem(item, channel);
-            }
+        for (const item of newItems) {
+            await this.config.onItem(item, channel, provider);
         }
     }
 }

@@ -19,3 +19,16 @@ test('vrati nejnovejsi inzeraty serazene od nejnovejsiho', async (t) => {
         assert.ok(items[i - 1].postedAt >= items[i].postedAt, 'poradi podle casu');
     }
 });
+
+// Hledany text shodny se znackou drive vracel presmerovani a nula vysledku.
+test('hledany text shodny se znackou vraci vysledky', async (t) => {
+    let items;
+    try {
+        items = await fetchNewest({ body: { categorySeoUrl: 'panske-mikiny', text: 'nike' } }, 5);
+    } catch (error) {
+        t.skip(`Aukro neni dostupne: ${error.message}`);
+        return;
+    }
+
+    assert.ok(items.length > 0, 'ocekavaji se vysledky, ne presmerovani');
+});
