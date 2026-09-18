@@ -72,5 +72,6 @@
     "channel-deleted": "Kanał usunięty.",
     "no-channels-found": "Nie znaleziono kanałów, być może powinieneś najpierw utworzyć jeden.",
     "deleting-all-private-channels": "Usuwanie wszystkich prywatnych kanałów...",
-    "must-have-supported-filter": "Adres URL musi zawierac co najmniej jeden filtr, na przyklad kategorie, marke, rozmiar lub cene."
+    "must-have-supported-filter": "Adres URL musi zawierac co najmniej jeden filtr, na przyklad kategorie, marke, rozmiar lub cene.",
+    "unsupported-site": "Ta strona nie jest obslugiwana. Uzyj adresu wyszukiwania z Vinted lub Aukro."
 }

@@ -72,5 +72,6 @@
     "channel-deleted": "Kanal gelöscht.",
     "no-channels-found": "Keine Kanäle gefunden, Sie sollten vielleicht zuerst einen erstellen.",
     "deleting-all-private-channels": "Alle privaten Kanäle werden gelöscht...",
-    "must-have-supported-filter": "Die URL muss mindestens einen Filter enthalten, zum Beispiel Kategorie, Marke, Groesse oder Preis."
+    "must-have-supported-filter": "Die URL muss mindestens einen Filter enthalten, zum Beispiel Kategorie, Marke, Groesse oder Preis.",
+    "unsupported-site": "Diese Seite wird nicht unterstuetzt. Verwende eine Such-URL von Vinted oder Aukro."
 }

@@ -2,63 +2,19 @@ import { SlashCommandBuilder } from 'discord.js';
 import { createBaseEmbed, sendErrorEmbed, sendWaitingEmbed, sendWarningEmbed } from '../components/base_embeds.js';
 import crud from '../../crud.js';
 import t from '../../t.js';
-import Logger from '../../utils/logger.js';
-import { Preference } from '../../database.js';
-import { buildApiFiltersFromUrl, hasAnyFilter } from '../../services/url_service.js';
+import { validateMonitoringUrl, urlNeedsSearchTextWarning } from '../../services/url_validation.js';
 
 export const data = new SlashCommandBuilder()
     .setName('start_monitoring')
-    .setDescription('Start monitoring this Vinted channel.')
+    .setDescription('Start monitoring this channel (Vinted or Aukro).')
     .addStringOption(option =>
         option.setName('url')
-            .setDescription('The URL of the Vinted product page.')
+            .setDescription('The URL of the search page on Vinted or Aukro.')
             .setRequired(true))
     .addStringOption(option =>
         option.setName('banned_keywords')
             .setDescription('Keywords to ban from the search results. (separate with commas -> "keyword1, keyword2")')
             .setRequired(false));
-
-// the base URL for monitoring Vinted products
-const VALID_BASE_URL = "catalog";
-
-// validate that the URL is a Vinted catalog URL with at least one query parameter
-function validateUrl(url) {
-    try {
-        // check if the route is the valid base URL
-        // https://www.vinted.fr/catalog?...
-        // split and find the catalog route
-        // split the / and find the last element and compare it to the VALID_BASE_URL
-        let route = new URL(url).pathname.split('/').pop();
-
-        if (route !== VALID_BASE_URL) {
-            return "invalid-url-with-example";
-        }
-        
-        const urlObj = new URL(url);
-        const searchParams = urlObj.searchParams;
-        // check if the URL has at least one query parameter
-        if (searchParams.toString().length === 0) {
-            return "must-have-query-params"
-        }
-
-        // Drive se vyzadovala znacka, protoze stary engine paroval inzeraty vyhradne
-        // pres brand_id. Dnes se filtruje na serveru podle cele adresy, takze staci
-        // jakykoli podporovany filtr - jen ne uplne prazdne hledani pres cely Vinted.
-        if (!hasAnyFilter(buildApiFiltersFromUrl(url))) {
-            return "must-have-supported-filter";
-        }
-
-        return true;
-    } catch (error) {
-        return "invalid-url";
-    }
-}
-
-function urlContainsSearchTextParameter(url) {
-    const urlObj = new URL(url);
-    const searchParams = urlObj.searchParams;
-    return searchParams.has('search_text');
-}
 
 export async function execute(interaction) {
     const l = interaction.locale;
@@ -70,7 +26,7 @@ export async function execute(interaction) {
     const channelId = interaction.channel.id;
 
     // validate the URL
-    const validation = validateUrl(url);
+    const validation = validateMonitoringUrl(url);
     if (validation !== true) {
         await sendErrorEmbed(interaction, t(l, validation));
         return;
@@ -98,7 +54,7 @@ export async function execute(interaction) {
         }
 
         // Check if the URL contains the search_text parameter
-        if (urlContainsSearchTextParameter(url)) {
+        if (urlNeedsSearchTextWarning(url)) {
             await sendWarningEmbed(interaction, t(l, 'url-contains-search-text'));
         }
 

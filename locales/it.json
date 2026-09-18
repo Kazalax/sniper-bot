@@ -52,5 +52,6 @@
     "channel-info": "Informazioni sul canale",
     "user-info-success": "Trova qui sotto le informazioni sull'utente!",
     "channel-info-success": "Trova qui sotto le informazioni sul canale!",
-    "must-have-supported-filter": "L'URL deve contenere almeno un filtro, ad esempio categoria, marca, taglia o prezzo."
+    "must-have-supported-filter": "L'URL deve contenere almeno un filtro, ad esempio categoria, marca, taglia o prezzo.",
+    "unsupported-site": "Questo sito non e supportato. Usa un URL di ricerca di Vinted o Aukro."
 }

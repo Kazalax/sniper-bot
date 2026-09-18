@@ -72,5 +72,6 @@
     "channel-deleted": "Channel deleted.",
     "no-channels-found": "No channels found, you should maybe create one first.",
     "deleting-all-private-channels": "Deleting all private channels...",
-    "must-have-supported-filter": "URL must contain at least one filter, for example a category, brand, size or price."
+    "must-have-supported-filter": "URL must contain at least one filter, for example a category, brand, size or price.",
+    "unsupported-site": "This site is not supported. Use a search URL from Vinted or Aukro."
 }
