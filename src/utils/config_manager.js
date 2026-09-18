@@ -61,7 +61,8 @@ class ConfigurationManager {
         // Jak casto se kontroluje jeden kanal. Vychozi minuta je kompromis mezi
         // rychlosti notifikace a zatezi, kterou bot dela na Vinted i na sit.
         monitor_interval_seconds: Number(process.env.MONITOR_INTERVAL_SECONDS) || 60,
-        blacklisted_countries_codes : process.env.BLACKLISTED_COUNTRIES_CODES.split(',') || []
+        // Bez ochrany proti chybejici promenne spadne cely bot uz pri nacteni modulu.
+        blacklisted_countries_codes : (process.env.BLACKLISTED_COUNTRIES_CODES || '').split(',').filter(Boolean)
     }
 
     /**
