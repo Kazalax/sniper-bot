@@ -1,14 +1,25 @@
-# Vinted Monitor - No Delay (fyndit Public Bot)
+# Sniper Bot
 
-Vinted Monitor is a bot that monitors the Vinted items route for new items and notifies users in real-time. It is designed to work with minimal delay, ensuring that users are always up-to-date with the latest items.
+Sniper Bot watches marketplace searches and posts every new listing to Discord.
+It is a fork of [teddy-vltn/vinted-discord-bot](https://github.com/teddy-vltn/vinted-discord-bot)
+rebuilt around a provider layer, so a site is a plug-in part rather than a hardcoded assumption.
 
-<p align="center">
-  <img src="./doc/bot.gif" alt="Example" style="max-height: 400px; width: auto;">
-</p>
+**Supported sites**
 
+- **Aukro** (aukro.cz) - working. No login, no session, filters are read from the search URL.
+- **Vinted** - not working since 2026-09-09. Vinted removed `/api/v2/catalog/items`
+  (404 on every domain, even inside a browser session that passed the Cloudflare challenge)
+  and put a bot challenge in front of the site. Reviving it would mean rendering the
+  catalog page in a real browser, which is a separate project.
 
-> [!TIP]
-> [Discord Invite](https://discord.gg/fyndit) - Join if you want: simply to use the bot freely (with autobuy, fast-buy and more features). The fastest bot on the market!
+**What this fork adds**
+
+- Provider layer (`src/providers/`): one folder per site, everything else is site agnostic.
+- Fault reporting to a Discord log channel: errors are sorted into classes
+  (temporary, rate limit, blocked, gone, changed response shape) and a gone endpoint stops
+  the channel instead of being retried every minute.
+- Status check: `/test` in Discord and `npm run check` in the terminal.
+- Tests via the built-in Node test runner: `npm test`.
 
 ## Table of Contents
 1. [Features](#features)
@@ -23,8 +34,8 @@ The bot is running for free on a public discord server that you can access if yo
 
 ## Features
 
-- **Real-time Monitoring**: Vinted Monitor fetches the latest items from the Vinted items route in real-time. 
-- **Monitoring all countries at once**: Lets you see all items from all country.
+- **Real-time Monitoring**: every channel is checked on its own timer, by default once a minute.
+- **Fault reporting**: a broken site is reported to a Discord log channel, not silently swallowed.
 - **Discord Integration**: The bot integrates with Discord and can send notifications to specific channels.
 - **Commands**: The bot supports a variety of commands that allow users to interact with it.
 - **Database Channel/User Management**: The bot can manage channels and users in a database, allowing for easy management of notifications.
@@ -45,8 +56,8 @@ The bot is running for free on a public discord server that you can access if yo
 1. Clone the repository from terminal or download through Github.
 
 ```bash
-git clone https://github.com/teddy-vltn/vinted-discord-bot.git
-cd vinted-monitor
+git clone https://github.com/Kazalax/sniper-bot.git
+cd sniper-bot
 ```
 
 2. Create a Discord bot in Discord's Developer Portal and invite it to your server:
@@ -99,8 +110,9 @@ The bot supports a variety of commands that allow users to interact with the bot
 - `/unlink_public_channel`: Unlinks a public channel url.
 - `/create_private_channel`: Creates a private channel.
 - `/delete_private_channel`: Deletes a private channel.
-- `/start_monitoring`: Starts monitoring the Vinted items route.
-- `/stop_monitoring`: Stops monitoring the Vinted items route.
+- `/start_monitoring`: Starts monitoring a search URL (Vinted or Aukro).
+- `/stop_monitoring`: Stops monitoring the channel.
+- `/test`: Checks whether the supported sites still answer.
 - `/set_mentions`: Sets the preferences for mentions in notifications.countries.
 - `/info`: Displays information about Channel/User.
 - `/set_max_channels`: Sets the maximum number of private channels a user can create.
